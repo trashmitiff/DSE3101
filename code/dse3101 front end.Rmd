@@ -22,7 +22,6 @@ library(stringr)
 Data
 
 ```{r message=FALSE, warning=FALSE}
-# Load datasets
 data_path <- "../data/"
 future_com_hub_score <- read_csv(file.path(data_path, "future_com_hub_score_scaled.csv"))
 future_combined <- read_csv(file.path(data_path, "final_combined_com_v2.csv"))
@@ -30,26 +29,25 @@ final_com_pca <- read_csv(file.path(data_path, "final_combined_com_pca.csv"))
 subzone_data <- read_csv(file.path(data_path, "subzone_final.csv"))
 subzone_data <- st_as_sf(subzone_data, wkt = "geog_boundary", crs = 4326)
 
-# Merge PCA data with spatial subzone data
 commuter_subzone_data <- subzone_data %>%
   left_join(final_com_pca, by = "subzone_name") %>%
   mutate(relative_commuter_score = round(ifelse(is.na(relative_commuter_score), 0, relative_commuter_score), 2)) %>%
   rename(planning_area_name = planning_area_name.x) %>%
   select(subzone_name, commuter_score, relative_commuter_score, geog_boundary, planning_area_name)
 
-# Fix invalid geometries in commuter_subzone_data
+# invalid geometries
 commuter_subzone_data <- commuter_subzone_data %>%
   mutate(geog_boundary = st_make_valid(geog_boundary)) %>%
   filter(st_is_valid(geog_boundary))
 
-# Now compute average commuter score per planning area
+#average commuter score per planning area (chart)
 commuter_planning_area <- commuter_subzone_data %>%
   group_by(planning_area_name) %>%
   summarise(avg_commuter_score = round(mean(relative_commuter_score, na.rm = TRUE), 2)) %>%
   ungroup() %>%
   select(planning_area_name, avg_commuter_score)
 
-# Creating a new dataframe to get rid of geog_boundary for table
+# Creating a new dataframe to get rid of geog_boundary (table)
 commuter_data4table <- commuter_subzone_data %>%
   select(subzone_name, planning_area_name, relative_commuter_score) %>%
   rename(
