@@ -1,0 +1,420 @@
+---
+title: "Public Transport Accessibility Dashboard"
+author: 
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+library(shiny)
+library(shinydashboard)
+library(sf)
+library(leaflet)
+library(lubridate)
+library(readr)
+library(dplyr)
+library(ggplot2)
+library(plotly)
+library(DT)
+library(stringr)
+```
+
+Commuter Hub Density Data
+```{r message=FALSE, warning=FALSE}
+data_path <- "../data/"
+future_com_hub_score <- read_csv(file.path(data_path, "future_com_hub_score_scaled.csv"))
+future_combined <- read_csv(file.path(data_path, "final_combined_com_v2.csv"))
+final_com_pca <- read_csv(file.path(data_path, "final_combined_com_pca.csv"))
+subzone_data <- read_csv(file.path(data_path, "subzone_final.csv"))
+subzone_data <- st_as_sf(subzone_data, wkt = "geog_boundary", crs = 4326)
+
+commuter_subzone_data <- subzone_data %>%
+  left_join(final_com_pca, by = "subzone_name") %>%
+  mutate(relative_commuter_score = round(ifelse(is.na(relative_commuter_score), 0, relative_commuter_score), 3)) %>%
+  rename(planning_area_name = planning_area_name.x) %>%
+  select(subzone_name, commuter_score, relative_commuter_score, geog_boundary, planning_area_name)
+
+# invalid geometries
+commuter_subzone_data <- commuter_subzone_data %>%
+  mutate(geog_boundary = st_make_valid(geog_boundary)) %>%
+  filter(st_is_valid(geog_boundary))
+
+# average commuter score per planning area (chart)
+commuter_planning_area <- commuter_subzone_data %>%
+  group_by(planning_area_name) %>%
+  summarise(avg_commuter_score = round(mean(relative_commuter_score, na.rm = TRUE), 3)) %>%
+  ungroup() %>%
+  select(planning_area_name, avg_commuter_score)
+
+# creating a new dataframe to get rid of geog_boundary (table)
+commuter_data4table <- commuter_subzone_data %>%
+  select(subzone_name, planning_area_name, relative_commuter_score) %>%
+  rename(
+    "Subzone" = subzone_name,
+    "Planning Area" = planning_area_name,
+    "Commuter Hub Score" = relative_commuter_score
+  ) %>%
+  group_by(Subzone, `Planning Area`) %>%
+  summarise(`Commuter Hub Score` = round(mean(`Commuter Hub Score`, na.rm = TRUE), 3), .groups = 'drop') %>%
+  st_drop_geometry() %>%
+  as.data.frame() %>%
+  arrange(desc(`Commuter Hub Score`)) 
+
+```
+
+Transport Accessibility Data
+```{r}
+final_acc_pca = read.csv(file.path(data_path, "final_combined_acc_pca.csv"))
+hourly_data = read.csv(file.path(data_path, "hourly_data_pca.csv"))
+planning_agg = read.csv(file.path(data_path, "planning_agg.csv"))
+
+accessibility_subzone_data <- subzone_data %>%
+  left_join(final_acc_pca, by = "subzone_name") %>%
+  mutate(acc_score_scaled = round(ifelse(is.na(acc_score_scaled), 0, acc_score_scaled), 3)) %>%
+  mutate(acc_score = round(ifelse(is.na(acc_score), 0, acc_score), 3)) %>%
+  mutate(bus_acc_score_scaled = round(ifelse(is.na(bus_acc_score_scaled), 0, 
+                                             bus_acc_score_scaled), 3)) %>%
+  mutate(bus_acc_score = round(ifelse(is.na(bus_acc_score), 0, bus_acc_score), 3)) %>%
+  mutate(mrt_acc_score_scaled = round(ifelse(is.na(mrt_acc_score_scaled), 0, 
+                                             mrt_acc_score_scaled), 3)) %>%
+  mutate(mrt_acc_score = round(ifelse(is.na(mrt_acc_score), 0, mrt_acc_score), 3)) %>%
+  rename(planning_area_name = planning_area_name.x) %>%
+  select(subzone_name, acc_score, acc_score_scaled, bus_acc_score, 
+         bus_acc_score_scaled, mrt_acc_score, mrt_acc_score_scaled, 
+         geog_boundary.x, planning_area_name)
+
+accessibility_subzone_data <- accessibility_subzone_data %>%
+  mutate(geog_boundary.x = st_make_valid(geog_boundary.x)) %>%
+  filter(st_is_valid(geog_boundary.x))
+
+accessibility_planning_area <- accessibility_subzone_data %>%
+  group_by(planning_area_name) %>%
+  summarise(
+    avg_acc_score = round(mean(acc_score_scaled, na.rm = TRUE), 3),
+    avg_bus_acc_score = round(mean(bus_acc_score_scaled, na.rm = TRUE), 3),
+    avg_mrt_acc_score = round(mean(mrt_acc_score_scaled, na.rm = TRUE), 3),) %>%
+  ungroup() %>%
+  select(planning_area_name, avg_acc_score, avg_bus_acc_score, avg_mrt_acc_score)
+
+
+accessibility_data4table <- accessibility_subzone_data %>%
+  select(subzone_name, planning_area_name, acc_score_scaled, bus_acc_score_scaled, mrt_acc_score_scaled) %>%
+  rename(
+    "Subzone" = subzone_name,
+    "Planning Area" = planning_area_name,
+    "Total Transport Accessibility Score" = acc_score_scaled,
+    "Bus Accessibility Score" = bus_acc_score_scaled,
+    "MRT Accessibility Score" = mrt_acc_score_scaled
+  ) %>%
+  group_by(Subzone, `Planning Area`) %>%
+  summarise(`Total Transport Accessibility Score` = round(mean(`Total Transport Accessibility Score`, na.rm = TRUE), 3),
+            `Bus Accessibility Score` = round(mean(`Bus Accessibility Score`, na.rm = TRUE), 3), 
+            `MRT Accessibility Score` = round(mean(`MRT Accessibility Score`, na.rm = TRUE), 3), .groups = 'drop' 
+            ) %>%
+  st_drop_geometry() %>%
+  as.data.frame() %>%
+  arrange(desc(`Total Transport Accessibility Score`)) 
+
+```
+
+UI Commuter Hub
+```{r}
+ui <- dashboardPage(
+  dashboardHeader(title = "Public Transport Accessibility"),
+  dashboardSidebar(
+    sidebarMenu(
+      menuItem("Commuter Hub Map", tabName = "commuter_hub", icon = icon("map")),
+      menuItem("Transport Accessibility", tabName = "accessibility", icon = icon("bus")),
+      menuItem("Simulation Mode", tabName = "simulation", icon = icon("cogs"))
+    )
+  ),
+  dashboardBody(
+    tabItems(
+      # COMMUTER HUB TAB
+      tabItem(tabName = "commuter_hub",
+        fluidRow(
+          box(title = "Notes", width = 12, status = "info", solidHeader = TRUE,
+            p("🧠 Understanding the Commuter Hub Density Score:"),
+            tags$ul(
+              tags$li("The commuter hub score is derived based on various transport factors including bus and train inflow/outflow volumes. A higher score indicates a location with a high movement of commuters, suggesting it as a major transport hub. The maximum score is 1, and the minimum is 0.")),
+            p("📌 How to use this dashboard:"),
+            tags$ul(
+              tags$li("🗺️ Click on the Map to explore commuter hub density visually."),
+              tags$li("🔍 Use the search bar to filter subzones or planning areas of your choice."),
+              tags$li("📊 Check the Chart to compare average commuter hub scores.")
+            )
+          )
+        ),
+        fluidRow(
+          column(width = 6,
+            box(title = "🗺️ Commuter Hub Map", width = NULL, height = "800px",
+              leafletOutput("commuter_map", height = "700px")
+            )
+          ),
+          column(width = 6,
+            box(title = "📊 Commuter Hub Data", width = NULL, height = "800px",
+              tabsetPanel(
+                tabPanel("Table", 
+                  textInput("subzone_search", "🔍 Search for an Area:", ""),
+                  DTOutput("commuter_table"), height = "700px"
+                ),
+                tabPanel("Chart", 
+                  plotlyOutput("commuter_chart", height = "700px")
+                )
+              )
+            )
+          )
+        )
+      ),
+  
+      # TRANSPORT ACCESSIBILITY TAB
+      tabItem(tabName = "accessibility",
+        fluidRow(
+          box(title = "Notes", width = 12, status = "info", solidHeader = TRUE,
+            p("🧠 Understanding the Transport Accessibility Score:"),
+            tags$ul(
+              tags$li("The transport accessibility score is derived based on various transport factors including number of bus stops and MRT stations in the area, as well as the frequency of buses and trains. A higher score indicates a location that is easy to access with the different modes of public transport. The maximum score is 1, and the minimum is 0.")),
+            p("📌 How to use this dashboard:"),
+            tags$ul(
+              tags$li("🗺️ Select preferred mode of transport and click on the Map to explore transport accessibility visually."),
+              tags$li("🔍 Use the search bar to filter subzones or planning areas of your choice."),
+              tags$li("📊 Select preferred mode of transport and check the Chart to compare average transport accessibility scores.")
+            )
+          )
+        ),
+        fluidRow(
+          column(width = 6,
+            box(title = "🗺️ Transport Accessibility Map", width = NULL, height = "850px",
+                leafletOutput("accessibility_map", height = "575px"),
+                selectInput("map_transport_mode", "Select Transport Mode:", 
+                choices = c("All" = "acc_score_scaled",
+                            "Bus" = "bus_acc_score_scaled",
+                            "MRT" = "mrt_acc_score_scaled")),
+                conditionalPanel(
+                  condition = "input.map_transport_mode == 'acc_score_scaled'",
+                  sliderInput("time_of_day", "Select Hour of Day:",
+                              min = 5, max = 24, value = 12, step = 1)
+                )
+            )
+          ),
+          column(width = 6, 
+            box(title = "📊 Transport Accessibility Data", width = NULL, height = "850px",
+              tabsetPanel(
+                tabPanel("Table",
+                  textInput("subzone_search", "🔍 Search for an Area:", ""),
+                  DTOutput("accessibility_table"), height = "700px"
+                ),
+                tabPanel("Chart", 
+                  selectInput("chart_transport_mode", "Select Transport Mode:",
+                    choices = c("All" = "avg_acc_score", 
+                                "Bus" = "avg_bus_acc_score", 
+                                "MRT" = "avg_mrt_acc_score")),
+                  plotlyOutput("accessibility_chart", height = "700px")
+                )
+              )
+            )
+          )
+        )
+      )
+    )
+  )
+)
+
+
+```
+
+Server Commuter Hub
+```{r}
+server <- function(input, output, session) {
+    
+  # Commuter Hub Table
+  output$commuter_table <- renderDT({
+      # when search input is empty, still shows all data
+      if (is.null(input$subzone_search) || input$subzone_search == "") {commuter_data4table
+      } else {
+          commuter_data4table <- commuter_data4table %>%
+            filter(
+              str_detect(`Subzone`, regex(input$subzone_search, ignore_case = TRUE)) |
+              str_detect(`Planning Area`, regex(input$subzone_search, ignore_case = TRUE))
+            )
+      }
+      datatable(commuter_data4table, 
+                options = list(pageLength = 10, searching = FALSE), 
+                rownames = FALSE, 
+                filter = "none")
+  })
+  
+  # Commuter Hub Map
+  output$commuter_map <- renderLeaflet({
+    leaflet(commuter_subzone_data) %>%
+      addTiles() %>%
+      addPolygons(
+        fillColor = ~colorQuantile("Reds", relative_commuter_score)(relative_commuter_score), 
+        fillOpacity = 0.7,
+        color = "white",
+        weight = 1,
+        popup = ~paste0("<b>", subzone_name, "</b><br>Commuter Score: ", relative_commuter_score)
+      ) %>%
+      addLegend(position = "bottomright",
+        colors = c("#B71C1C", "#D32F2F", "#EF5350", "#FFCDD2", "#FFEBEE"),
+        labels = c("Very High", "High", "Medium", "Low", "Very Low"),
+        title = "Commuter Hub Score",
+        opacity = 1
+      )
+  })
+  
+  # Commuter Hub Chart
+  output$commuter_chart <- renderPlotly({
+    com_chart <- ggplot(commuter_planning_area, aes(x = reorder(planning_area_name, avg_commuter_score), 
+                                        y = avg_commuter_score, 
+                                        fill = avg_commuter_score, 
+                                        title = "Commuter Hub Density Score",
+                                        text = paste("Planning Area:", planning_area_name, 
+                                                     "<br>Score:", round(avg_commuter_score, 2)))) +
+      geom_col() +
+      scale_fill_distiller(palette = "Reds", direction = 1, name = "Score") +
+      coord_flip() +
+      labs(x = "Planning Area", y = "Average Commuter Score", title = "Average Commuter Score by Planning Area") +
+      theme_minimal() +
+      theme(legend.position = "right",
+            axis.text = element_text(size = 7),
+            axis.title = element_text(size = 10),
+            plot.title = element_text(size = 12, face = "bold"))
+    
+    ggplotly(com_chart, tooltip = "text")
+  })
+  
+  
+  # Transport Accessibility Table
+  output$accessibility_table <- renderDT({
+      # when search input is empty, still shows all data
+      if (is.null(input$subzone_search) || input$subzone_search == "") {accessibility_data4table
+      } else {
+          accessibility_data4table <- accessibility_data4table %>%
+            filter(
+              str_detect(`Subzone`, regex(input$subzone_search, ignore_case = TRUE)) |
+              str_detect(`Planning Area`, regex(input$subzone_search, ignore_case = TRUE))
+            )
+      }
+      datatable(accessibility_data4table, 
+                options = list(pageLength = 10, searching = FALSE), 
+                rownames = FALSE, 
+                filter = "none")
+  })  
+
+  # Transport Accessibility Map
+  output$accessibility_map <- renderLeaflet({
+    
+    if (input$map_transport_mode == "acc_score_scaled") {
+      
+      hour_data <- hourly_data %>%
+        filter(hour == ifelse(input$time_of_day == 24, 0, input$time_of_day)) %>%
+        mutate(hourly_acc_score_scaled = round(acc_score_scaled, 3)) %>%
+        select(subzone_name, hourly_acc_score_scaled)
+      
+      accessibility_map_data <- accessibility_subzone_data %>% 
+        left_join(hour_data, by = "subzone_name") %>%
+        mutate(accessibility_score = ifelse(is.na(hourly_acc_score_scaled), 0, hourly_acc_score_scaled))
+      
+      
+      leaflet(accessibility_map_data) %>%
+      addTiles() %>%
+      addPolygons(
+        fillColor = ~colorQuantile("Reds", accessibility_score)(accessibility_score), 
+        fillOpacity = 0.7,
+        color = "white",
+        weight = 1,
+        popup = ~paste0("<b>", subzone_name, "</b><br>Accessibility Score: ", accessibility_score)
+      ) %>%
+      addLegend(position = "bottomright",
+        colors = c("#B71C1C", "#D32F2F", "#EF5350", "#FFCDD2", "#FFEBEE"),
+        labels = c("Very High", "High", "Medium", "Low", "Very Low"),
+        title = "Accessibility Score",
+        opacity = 1)
+      
+    } else if (input$map_transport_mode == "bus_acc_score_scaled") {
+      accessibility_map_data <- accessibility_subzone_data %>%
+        mutate(accessibility_score = get(input$map_transport_mode))
+      pal <- colorBin(
+        palette = "Greens",
+        domain = accessibility_map_data$accessibility_score,
+        bins = c(0, 0.05, 0.1, 0.15, 0.2, 0.4, 0.6, 0.8, 1)
+      )
+      
+      leaflet(accessibility_map_data) %>%
+        addTiles() %>%
+        addPolygons(
+          fillColor = ~pal(accessibility_score),
+          fillOpacity = 0.7,
+          color = "white", 
+          weight = 1,
+          popup = ~paste0("<b>", subzone_name, "</b><br>Accessibility Score: ", accessibility_score)
+        ) %>%
+        addLegend(position = "bottomright",
+                  pal = pal,
+                  values = ~accessibility_score,
+                  title = "Accessibility Score",
+                  opacity = 1)
+      
+    } else {
+      accessibility_map_data <- accessibility_subzone_data %>%
+        mutate(accessibility_score = get(input$map_transport_mode))
+      pal <- colorBin(
+        palette = "Blues",
+        domain = accessibility_map_data$accessibility_score,
+        bins = c(0, 0.02, 0.04, 0.06, 0.08, 0.1, 0.2, 0.4, 1)
+      )
+      
+      leaflet(accessibility_map_data) %>%
+        addTiles() %>%
+        addPolygons(
+          fillColor = ~pal(accessibility_score),
+          fillOpacity = 0.7,
+          color = "white", 
+          weight = 1,
+          popup = ~paste0("<b>", subzone_name, "</b><br>Accessibility Score: ", accessibility_score)
+        ) %>%
+        addLegend(position = "bottomright",
+                  pal = pal,
+                  values = ~accessibility_score,
+                  title = "Accessibility Score",
+                  opacity = 1
+                  )
+    }
+  })
+  
+  
+  # Transport Accessibility Chart
+  output$accessibility_chart <- renderPlotly({
+    selected_score <- input$chart_transport_mode
+    acc_chart <- ggplot(accessibility_planning_area, aes(x = reorder(planning_area_name, get(selected_score)),
+                                                         y = get(selected_score),
+                                                         fill = get(selected_score),
+                                                         text = paste("Planning Area:", planning_area_name,
+                                                                      "<br>Score:", round(get(selected_score), 2)))) +
+      geom_col() +
+      scale_fill_distiller(palette = "Reds", direction = 1, name = "Score") + 
+      coord_flip() +
+      labs(x = "Planning Area",
+           y = "Average Accessibility Score", 
+           title = paste("Average",
+                         switch(selected_score, 
+                                "avg_acc_score" = "Overall",
+                                "avg_bus_acc_score" = "Bus",
+                                "avg_mrt_acc_score" = "MRT"),
+                         "Accessibility Score by Planning Area")) +
+      theme_minimal() +
+      theme(legend.position = "right",
+            axis.text = element_text(size = 7),
+            axis.title = element_text(size = 10),
+            plot.title = element_text(size = 12, face = "bold"))
+    ggplotly(acc_chart, tooltip = "text")
+  })
+}
+```
+
+
+```{r}
+shinyApp(ui, server)
+```
+
