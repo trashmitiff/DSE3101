@@ -83,10 +83,12 @@ accessibility_subzone_data <- subzone_data %>%
          bus_acc_score_scaled, mrt_acc_score, mrt_acc_score_scaled, 
          geog_boundary.x, planning_area_name)
 
+# invalid geometries
 accessibility_subzone_data <- accessibility_subzone_data %>%
   mutate(geog_boundary.x = st_make_valid(geog_boundary.x)) %>%
   filter(st_is_valid(geog_boundary.x))
 
+# average accessibility score for each transport mode per planning area (chart)
 accessibility_planning_area <- accessibility_subzone_data %>%
   group_by(planning_area_name) %>%
   summarise(
@@ -96,7 +98,7 @@ accessibility_planning_area <- accessibility_subzone_data %>%
   ungroup() %>%
   select(planning_area_name, avg_acc_score, avg_bus_acc_score, avg_mrt_acc_score)
 
-
+# creating a new dataframe to get rid of geog_boundary (table)
 accessibility_data4table <- accessibility_subzone_data %>%
   select(subzone_name, planning_area_name, acc_score_scaled, bus_acc_score_scaled, mrt_acc_score_scaled) %>%
   rename(
@@ -314,6 +316,7 @@ server <- function(input, output, session) {
       
       accessibility_map_data <- accessibility_subzone_data %>% 
         left_join(hour_data, by = "subzone_name") %>%
+        left_join(final_acc_pca, by = "subzone_name") %>%
         mutate(accessibility_score = ifelse(is.na(hourly_acc_score_scaled), 0, hourly_acc_score_scaled))
       
       if (input$time_of_day >= 1 & input$time_of_day <= 4) {
@@ -337,7 +340,13 @@ server <- function(input, output, session) {
         fillOpacity = 0.7,
         color = "white",
         weight = 1,
-        popup = ~paste0("<b>", subzone_name, "</b><br>Accessibility Score: ", accessibility_score)
+        popup = ~paste0(
+          "<b>", subzone_name, "</b><br>",
+          "Accessibility Score: ", accessibility_score, "<br>",
+          "No. of Bus Stops: ", round(num_bus_stops, 0), "<br>",
+          "No. of Bus Services: ", round(num_bus_services, 0), "<br>",
+          "No. of Train Stations: ", round(num_stations_per_subzone, 0), "<br>",
+          "No. of Train Lines: ", round(num_train_lines_per_subzone, 0))
       ) %>%
       addLegend(position = "bottomright",
         colors = c("#B71C1C", "#D32F2F", "#EF5350", "#FFCDD2", "#FFEBEE"),
@@ -346,8 +355,14 @@ server <- function(input, output, session) {
         opacity = 1)
       
     } else if (input$map_transport_mode == "bus_acc_score_scaled") {
+      
+      bus_data <- final_acc_pca %>%
+        select(subzone_name, num_bus_stops, num_bus_services)
+      
       accessibility_map_data <- accessibility_subzone_data %>%
-        mutate(accessibility_score = get(input$map_transport_mode))
+        left_join(bus_data) %>%
+        mutate(accessibility_score = ifelse(is.na(bus_acc_score_scaled), 0, bus_acc_score_scaled))
+      
       pal <- colorBin(
         palette = "Greens",
         domain = accessibility_map_data$accessibility_score,
@@ -361,7 +376,10 @@ server <- function(input, output, session) {
           fillOpacity = 0.7,
           color = "white", 
           weight = 1,
-          popup = ~paste0("<b>", subzone_name, "</b><br>Accessibility Score: ", accessibility_score)
+          popup = ~paste0("<b>", subzone_name, "</b><br>",
+                          "Accessibility Score: ", accessibility_score, "<br>",
+                          "No. of Bus Stops: ", round(num_bus_stops, 0), "<br>",
+                          "No. of Bus Services: ", round(num_bus_services, 0))
         ) %>%
         addLegend(position = "bottomright",
                   pal = pal,
@@ -370,8 +388,14 @@ server <- function(input, output, session) {
                   opacity = 1)
       
     } else {
+      
+      mrt_data <- final_acc_pca %>%
+        select(subzone_name, num_stations_per_subzone, num_train_lines_per_subzone)
+      
       accessibility_map_data <- accessibility_subzone_data %>%
-        mutate(accessibility_score = get(input$map_transport_mode))
+        left_join(mrt_data) %>%
+        mutate(accessibility_score = ifelse(is.na(mrt_acc_score_scaled), 0, mrt_acc_score_scaled))
+      
       pal <- colorBin(
         palette = "Blues",
         domain = accessibility_map_data$accessibility_score,
@@ -385,7 +409,10 @@ server <- function(input, output, session) {
           fillOpacity = 0.7,
           color = "white", 
           weight = 1,
-          popup = ~paste0("<b>", subzone_name, "</b><br>Accessibility Score: ", accessibility_score)
+          popup = ~paste0("<b>", subzone_name, "</b><br>",
+                          "Accessibility Score: ", accessibility_score, "<br>",
+                          "No. of Train Stations: ", round(num_stations_per_subzone, 0), "<br>",
+                          "No. of Train Lines: ", round(num_train_lines_per_subzone, 0))
         ) %>%
         addLegend(position = "bottomright",
                   pal = pal,
@@ -406,7 +433,8 @@ server <- function(input, output, session) {
                                                          text = paste("Planning Area:", planning_area_name,
                                                                       "<br>Score:", round(get(selected_score), 2)))) +
       geom_col() +
-      scale_fill_distiller(palette = "Reds", direction = 1, name = "Score") + 
+      scale_fill_distiller(palette = ifelse(selected_score == "avg_acc_score", "Reds", 
+                                            ifelse(selected_score == "avg_bus_acc_score", "Greens", "Blues")), direction = 1, name = "Score") + 
       coord_flip() +
       labs(x = "Planning Area",
            y = "Average Accessibility Score", 
