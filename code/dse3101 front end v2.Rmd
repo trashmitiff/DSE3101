@@ -186,7 +186,7 @@ ui <- dashboardPage(
         ),
         fluidRow(
           column(width = 6,
-            box(title = "🗺️ Transport Accessibility Map", width = NULL, height = "850px",
+            box(title = "🗺️ Transport Accessibility Map", width = NULL, height = "900px",
                 leafletOutput("accessibility_map", height = "575px"),
                 selectInput("map_transport_mode", "Select Transport Mode:", 
                 choices = c("All" = "acc_score_scaled",
@@ -200,7 +200,7 @@ ui <- dashboardPage(
             )
           ),
           column(width = 6, 
-            box(title = "📊 Transport Accessibility Data", width = NULL, height = "850px",
+            box(title = "📊 Transport Accessibility Data", width = NULL, height = "900px",
               tabsetPanel(
                 tabPanel("Table",
                   textInput("subzone_search", "🔍 Search for an Area:", ""),
