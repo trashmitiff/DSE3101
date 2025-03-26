@@ -67,6 +67,7 @@ Transport Accessibility Data
 final_acc_pca = read.csv(file.path(data_path, "final_combined_acc_pca.csv"))
 hourly_data = read.csv(file.path(data_path, "hourly_data_pca.csv"))
 planning_agg = read.csv(file.path(data_path, "planning_agg.csv"))
+raw_acc_values = read.csv(file.path(data_path, "final_combined_acc.csv"))
 
 accessibility_subzone_data <- subzone_data %>%
   left_join(final_acc_pca, by = "subzone_name") %>%
@@ -226,7 +227,7 @@ server <- function(input, output, session) {
       addTiles() %>%
       addPolygons(
         fillColor = ~colorQuantile("Reds", relative_commuter_score)(relative_commuter_score), 
-        fillOpacity = 0.3,
+        fillOpacity = 0.6,
         color = "white",
         weight = 1,
         popup = ~paste0("<b>", subzone_name, "</b><br>Commuter Score: ", relative_commuter_score)
@@ -301,7 +302,7 @@ server <- function(input, output, session) {
       
       accessibility_map_data <- accessibility_subzone_data %>% 
         left_join(hour_data, by = "subzone_name") %>%
-        left_join(final_acc_pca, by = "subzone_name") %>%
+        left_join(raw_acc_values, by = "subzone_name") %>%
         mutate(accessibility_score = ifelse(is.na(hourly_acc_score_scaled), 0, hourly_acc_score_scaled))
       
       if (input$time_of_day >= 1 & input$time_of_day <= 4) {
@@ -320,7 +321,7 @@ server <- function(input, output, session) {
       addTiles() %>%
       addPolygons(
         fillColor = ~color_scale(accessibility_score), 
-        fillOpacity = 0.7,
+        fillOpacity = 0.9,
         color = "white",
         weight = 1,
         popup = ~paste0(
@@ -337,7 +338,7 @@ server <- function(input, output, session) {
         title = "Accessibility Score",
         opacity = 1)
     } else if (input$transport_mode == "Bus") {
-      bus_data <- final_acc_pca %>%
+      bus_data <- raw_acc_values %>%
         select(subzone_name, num_bus_stops, num_bus_services)
       
       accessibility_map_data <- accessibility_subzone_data %>%
@@ -353,7 +354,7 @@ server <- function(input, output, session) {
         addTiles() %>%
         addPolygons(
           fillColor = ~pal(accessibility_score),
-          fillOpacity = 0.7,
+          fillOpacity = 0.9,
           color = "white", 
           weight = 1,
           popup = ~paste0("<b>", subzone_name, "</b><br>",
@@ -366,7 +367,7 @@ server <- function(input, output, session) {
                   title = "Accessibility Score",
                   opacity = 1)
     } else {
-      mrt_data <- final_acc_pca %>%
+      mrt_data <- raw_acc_values %>%
         select(subzone_name, num_stations_per_subzone, num_train_lines_per_subzone)
       
       accessibility_map_data <- accessibility_subzone_data %>%
@@ -382,7 +383,7 @@ server <- function(input, output, session) {
         addTiles() %>%
         addPolygons(
           fillColor = ~pal(accessibility_score),
-          fillOpacity = 0.7,
+          fillOpacity = 0.9,
           color = "white", 
           weight = 1,
           popup = ~paste0("<b>", subzone_name, "</b><br>",
