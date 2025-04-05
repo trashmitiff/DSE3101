@@ -849,7 +849,7 @@ server <- function(input, output, session) {
     
     table_data <- current_df() %>% 
       st_drop_geometry() %>%
-      mutate(across(where(is.numeric), round, digits=3))
+      mutate(across(where(is.numeric), \(x) round(x, digits = 3)))
     
     if (!is.null(input$area_search) && input$area_search != "") {
       table_data <- table_data %>%
