@@ -77,14 +77,15 @@ Below are some key files where data preprocessing and modelling are conducted:
    - Various data sources were combined and organised on a subzone level
 - PCA.ipynb
     - Application of the variance-adjusted Principal Component Analysis technique
+    - Number of principal components chosen is based on 70% to 80% of total variance explained
     - Derivation of weights for features
 
 Key results:
-- Accessibility Score (on a subzone level): 
+- Accessibility Score (on a subzone level):
     - Overall public transport accessibility score
     - Bus accessibility score
     - Train accessibility score
-- Commuter Hub Score
+- Commuter Hub Score (on a subzone level)
 
 ## Run locally
 
