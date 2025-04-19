@@ -1,0 +1,10 @@
+geopandas==1.0.1
+geopy==2.4.1
+matplotlib==3.10.1
+numpy==2.2.4
+pandas==2.2.3
+Requests==2.32.3
+scikit_learn==1.6.1
+seaborn==0.13.2
+Shapely==2.1.0
+xlrd==2.0.1
