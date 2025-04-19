@@ -9,7 +9,7 @@ Our dashboard is run via RShiny, which can be accessed [here](https://wooderland
 
 The dashboard is built using R Shiny and is structured using the shinydashboard framework. Custom CSS and HTML elements were utilised to deliver an intuitive and modular user interface. The UI is structured into five primary modules, where users may toggle between the different tabs using the collapsible side navigation bar.
 
-Current Transport Visualisation Tab:
+### Current Transport Visualisation Tab:
 This tab was designed to allow users to visualise Singapore’s current transport network in detail. It contains 3 subtabs:
 
 MRT Map: view of current MRT lines and stations
@@ -23,7 +23,7 @@ Bus Routes Map: view of all current bus routes
 ![image](https://github.com/user-attachments/assets/92a3875d-d3a5-42fe-9b20-bcc2a2e9f860)
 
 
-Commuter Hub Mode:
+### Commuter Hub Mode:
 
 ![image](https://github.com/user-attachments/assets/2cf6e673-070c-409c-9241-0ea08323845b)
 
@@ -37,7 +37,7 @@ Key Features:
 
 
 
-Transport Accessibility Mode:
+### Transport Accessibility Mode:
 ![image](https://github.com/user-attachments/assets/d884393e-1980-4c81-8023-ae803f819a54)
 
 
@@ -48,7 +48,7 @@ Key Features:
 2. Hour-of-day slider to simulate variations of accessibility throughout the day
 3. Interactive choropleth map, table and chart
 
-Simulation Mode: 
+### Simulation Mode: 
 ![image](https://github.com/user-attachments/assets/99836538-e7be-46b4-9d4d-356bfdf0a484)
 
 The Simulation Mode was designed to allow users to test real-world trade-offs by placing a new stop or adjusting bus frequency in their preferred planning areas. They can see how accessibility improves across time and region, giving them immediate feedback on possible interventions. 
@@ -65,7 +65,9 @@ Key Features:
 
 
 ## Backend
-We made use of variance-adjusted Principal Component Analysis to derive accessibility and commuter hub scores. Below are some key files where data preprocessing and modelling are conducted:
+We utilised variance-adjusted Principal Component Analysis to derive accessibility and commuter hub scores. 
+Our models aim to provide an objective and data-driven method of weighing a range of features to produce reliable scores that reflect the nature of the public transport system.
+Below are some key files where data preprocessing and modelling are conducted:
 
 - DSEproject.ipynb
     - Data cleaning 
@@ -74,9 +76,15 @@ We made use of variance-adjusted Principal Component Analysis to derive accessib
         - Data quality validation
    - Various data sources were combined and organised on a subzone level
 - PCA.ipynb
-    - Application of variance-adjusted Principal Component Analysis
+    - Application of the variance-adjusted Principal Component Analysis technique
     - Derivation of weights for features
 
+Key results:
+- Accessibility Score (on a subzone level): 
+    - Overall public transport accessibility score
+    - Bus accessibility score
+    - Train accessibility score
+- Commuter Hub Score
 
 ## Run locally
 
